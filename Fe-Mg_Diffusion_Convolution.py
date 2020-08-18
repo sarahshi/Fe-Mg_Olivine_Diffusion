@@ -23,31 +23,7 @@ The diffusivity of H+ cations along the a [100] axis of olivine in um^2/S
     DH2O = 1e12 * (10 ** (-5.4)) * np.exp(-130000 / (8.314 * T_K))
     return DH2O
 
-# %%
-def test():
-    a = 1/np.array([1,2,3,4,5,6,7,8,9,8,7,6])
-    for x in range(10):
-        if a[x+1]> a[x]:
-            break
 
-def test2():
- 
-    b = [1.0,
- 0.5,
- 0.3333333333333333,
- 0.25,
- 0.2,
- 0.16666666666666666,
- 0.14285714285714285,
- 0.125,
- 0.1111111111111111,
- 0.125,
- 0.14285714285714285,
- 0.16666666666666666]
-    for x in range(10):
-        if b[x+1]> b[x]:
-            break
-%timeit test2()
 # %%
 
 def VectorMaker(init_Concentration, N_points):
@@ -114,18 +90,19 @@ def diffusion_step(vector_c_in, vector_Fo_in, diffusivity_function, diff_kernel_
 
     vector_D = diffusivity_function(vector_Fo)
 
-    vector_cxD = vector_D * vector_c
+    Diffusion = (np.convolve(vector_c, diff_kernel_1, mode="same")* vector_D)[3:-3]
 
-    Diffusion = np.convolve(vector_cxD, diff_kernel_1, mode="same")[3:-3]
+
 
     Diff_C = np.convolve(vector_c, der_kernel_2, mode="same")[3:-3]
 
     Diff_D = np.convolve(vector_D, der_kernel_2, mode="same")[3:-3]
 
-    vector_out = vector_c_in + delta*(Diffusion)
-    #vector_c_in + delta*(Diffusion + (Diff_C* Diff_D))
+    vector_out = vector_c_in + delta*(Diffusion + (Diff_C* Diff_D))
 
-    return  vector_out
+    #vector_c_in + delta*(Diffusion + (Diff_C* Diff_D))
+    out = (Diff_C* Diff_D)*delta
+    return vector_out
 
 
 def interp_data():
@@ -151,11 +128,7 @@ def Diffusion_Stepper(Element, dt, dx, time):
 3) Diffusivities  Column 
 """   
 # %%
-fO2 = 2.006191e-05 # Pa
-EFo = 201000. # J/mol
-P = 200000000. # Pa
-R = 8.3145 # J/molK
-T = 1343.15 # 1298.15 # T in kelvin
+
 # %%
 """
 One Idea is to do a refining grid search. Do a really sparse dt model with tight dX and then refine. based on when the best fit is bracketed 
@@ -181,9 +154,9 @@ def D_Fo(T, P, fO2, alpha, beta, gamma, XFo=None, EFo= 201000, R= 8.3145):
         P, - Pressure in Pa
         R, Ideal Gas Constant 8.3145 # J/mol
         T,  - temperature in absolute degrees Kelvin 
-        alpha, -  minimum angle to [100] axis a
-        beta, - minimum angle to [010] axis b
-        gamma - minimum angle to [001] axis c
+        alpha, -  minimum angle to [100] axis a -- degrees
+        beta, - minimum angle to [010] axis b -- degrees
+        gamma - minimum angle to [001] axis c -- degrees
 
     Returns: Diffusivity function That's only input it is:
                 XFo, - Forsterite in Fractional Units This can be a numpy array of the data. 
@@ -200,8 +173,6 @@ def D_Fo(T, P, fO2, alpha, beta, gamma, XFo=None, EFo= 201000, R= 8.3145):
         forsteriteterm = 10**(3.*(0.9-XFo))
         D = tenterm * fugacityterm * forsteriteterm * np.exp(-(EFo + 7 * (10**-6 * (P-10**5)))/(R*T))
         # This next term should be calculated with angle in degrees. 
-        
-
         alpha_rad, beta_rad, gamma_rad = np.deg2rad((alpha, beta, gamma))
         Di =  ((1/6) * D * (np.cos(alpha_rad)**2)) + ((1/6) * D * (np.cos(beta_rad)**2)) + (D * (np.cos(gamma_rad)**2)) # Use this term for crystallographic orientation constraints from EBSD. 
         
@@ -319,29 +290,92 @@ D_FO_Func(XFo=np.array((0.9, 0.7, 0.6, 0.77)))
 # Weighted Residuals. Weights will be inverse of STD^2. If STdevs are the same I can use normal functions. 
 
 # %%
-dx_micron = 2
-dx = dx_micron*1e-6 # m
-dt =0.6e5 # 100000
+
+
+
+dx_micron = 5
+dx = dx_micron * 1e-6 # m
+dt =60000 # 100000
 Di = D_FO_Func(0.8)
 # Check for obeying the CFL Condition
 CFL = (dt*Di) / (dx**2)
 print(CFL)
+# delta = (dt)/ ((dx) ** 2)
 
-# %%
+Total_time =  160 * 24 * 60 * 60    # seconds 
+timesteps = int(Total_time/ dt)
 
+ # %%
+pad  = np.ones(3)*0.7
 vector_c_in = np.ones(50)*0.8
 vector_Fo_in = vector_c_in
 D_Fo = D_FO_Func(vector_Fo_in)
-pad  = np.ones(3)*0.7
-
 kernel_1, kernel_2, delta = diffusion_kernel(dt=dt, dx=dx)
 
-diffusion_step(vector_c_in = vector_c_in, vector_Fo_in = vector_Fo_in , diffusivity_function = D_FO_Func, 
-diff_kernel_1 = kernel_1, der_kernel_2 = kernel_2, delta= delta, pad_c= pad, pad_Fo = pad) 
+for time in range(timesteps):
 
-#vector_out_c = 
+    vector_c_in = diffusion_step(vector_c_in = vector_c_in, vector_Fo_in = vector_Fo_in , 
+        diffusivity_function = D_FO_Func, diff_kernel_1 = kernel_1, der_kernel_2 = kernel_2, 
+        delta= delta, pad_c= pad, pad_Fo = pad) 
+    vector_Fo_in = vector_c_in
+
+num = len(vector_c_in)
+distance =  np.linspace(0, dx*(num), num)
+plt.plot(distance, vector_c_in)
+
+
+
+# Sum of the Residuals^2 Write it so that it evaluates it at certain intervals 
+# Maybe divide timesteps into even amounts and then evaluate every N timesteps.
+
+# Also think about 2-D diffusion for profiles with no central plateau. A 2D convolution algorithm would be helpful. 
 # %%
-# Write Pad function. 
+# Write Pad function. Each Step needs a pad
 # 1) Constant Boundary - Diffusion
 # 2) Constant Boundary - No_Diffusion at edge
 # 3) Changing Boundary - Ascent Path
+# %%
+
+# %%
+
+# %%
+vector_c = np.concatenate([pad, vector_c_in, pad])
+
+pad_d = np.ones(3)*1.82955e-16
+d = np.ones(50)*9.16947e-17
+
+#vector_D = diffusivity_function(vector_Fo)
+
+vector_D = np.concatenate([pad_d, d,pad_d])
+
+vector_cxD = vector_D * vector_c
+
+
+Diffusion = np.convolve(kernel_1,vector_c, mode="same")#[3:-3]
+
+delta = (dt) / ((dx) ** 2)
+delta*(Diffusion*vector_D)+vector_c
+
+
+# %%
+
+    vector_c = np.concatenate([pad_c, vector_c_in, pad_c])
+
+    vector_Fo = np.concatenate([pad_Fo, vector_Fo_in, pad_Fo])
+
+    pad_d = np.ones(3)*1.82955e-04
+    d = np.ones(50)*9.16947e-05
+
+    vector_D = diffusivity_function(vector_Fo)
+    vector_D = np.concatenate([pad_d, d, pad_d])
+    vector_cxD = vector_D * vector_c # what is this g
+
+    Diffusion = np.convolve( diff_kernel_1,vector_cxD, mode="same")[3:-3]
+
+
+    vector_out = vector_c_in + delta*(Diffusion) #+ (Diff_C* Diff_D))
+
+    #vector_c_in + delta*(Diffusion + (Diff_C* Diff_D))
+
+    return vector_out
+# %%
