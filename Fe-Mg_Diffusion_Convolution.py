@@ -36,14 +36,15 @@ def diffusion_kernel(dt, dx):
 
     # Diffusion Term
     kernel_1 = np.zeros(3)
-    kernel_1[1] = -2 
     kernel_1[0] = 1
+    kernel_1[1] = -2 
     kernel_1[2] = 1
 
-    # Forward Difference Derivative. I might try a central differencing equation. 
+    # Central Difference Derivative. This is different than what is used in DIPRA which is a forward difference approx. 
+    # Remember to divide by 2 in diffusion step
     kernel_2 = np.zeros(3)
-    kernel_2[1] = 1 
-    kernel_2[0] = 0
+    kernel_2[0] = 1
+    kernel_2[1] = 0
     kernel_2[2] = -1 
 
     return kernel_1, kernel_2, delta
@@ -98,7 +99,7 @@ def diffusion_step(vector_c_in, vector_Fo_in, diffusivity_function, diff_kernel_
 
     Diff_D = np.convolve(vector_D, der_kernel_2, mode="same")[3:-3]
 
-    vector_out = vector_c_in + delta*(Diffusion + (Diff_C* Diff_D))
+    vector_out = vector_c_in + delta*(Diffusion + (Diff_C* Diff_D)/2)
 
     #vector_c_in + delta*(Diffusion + (Diff_C* Diff_D))
     out = (Diff_C* Diff_D)*delta
