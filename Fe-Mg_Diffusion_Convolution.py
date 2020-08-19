@@ -295,15 +295,15 @@ D_FO_Func(XFo=np.array((0.9, 0.7, 0.6, 0.77)))
 
 dx_micron = 5
 dx = dx_micron * 1e-6 # m
-dt =60000 # 100000
+dt =4000 # 100000
 Di = D_FO_Func(0.8)
 # Check for obeying the CFL Condition
 CFL = (dt*Di) / (dx**2)
 print(CFL)
 # delta = (dt)/ ((dx) ** 2)
 
-Total_time =  160 * 24 * 60 * 60    # seconds 
-timesteps = int(Total_time/ dt)
+Total_time =  5 * 24 * 60 * 60    # seconds 
+timesteps = 100 #int(Total_time/ dt)
 
  # %%
 pad  = np.ones(3)*0.7
@@ -319,10 +319,14 @@ for time in range(timesteps):
         delta= delta, pad_c= pad, pad_Fo = pad) 
     vector_Fo_in = vector_c_in
 
-num = len(vector_c_in)
-distance =  np.linspace(0, dx*(num), num)
-plt.plot(distance, vector_c_in)
+vector_c_in
+# %%
 
+num = len(vector_c_in)
+distance =  np.linspace(0, dx_micron*(num), num)
+plt.plot(distance, vector_c_in)
+plt.xlabel("Micron")
+plt.ylabel("Fo")
 
 
 # Sum of the Residuals^2 Write it so that it evaluates it at certain intervals 
