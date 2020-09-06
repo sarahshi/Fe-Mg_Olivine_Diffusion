@@ -368,6 +368,25 @@ distance =  np.linspace(0, dx_micron*(num), num)
 Fo_diffusion_results = timestepper(vector_c_in= vector_c_in, vector_Fo_in=vector_Fo_in, diffusivity_function= D_FO_Func, bounds_c=bounds_c, timesteps= timesteps)
 Fo_diffusion_results[-1]
 # %%
+
+
+
+num = len(vector_c_in)
+distance =  np.linspace(0, dx_micron*(num), num)
+plt.plot(distance, Fo_diffusion_results[4572])
+plt.xlabel("Micron")
+plt.ylabel("Fo")
+#plt.ylim(0.65, 0.81)
+
+ol40 = np.loadtxt("/Users/henry/Python Files/Fe-Mg Diffusion/AZ18_WHT06_ol40_C-Prof.txt")
+ol40_Fo = ol40[:,1]
+ol40_x = ol40[:,0]
+
+plt.plot(ol40_x , ol40_Fo)
+plt.plot(step_x,step_c)
+
+# %%
+
 #%%
 # In the AM write code to make a PDF for all data. 
 
@@ -400,9 +419,6 @@ def Best_fit_Liklihood(results, data_interp, sigma, dt):
     time = (idx_min + 1)* dt # seconds
     time_days = time/(60*60*24)
     return time, idx_min, sum_r2
-
-def seconds_to_days(time_seconds):
-    return time_seconds/(60*60*24)
 # Find a way to return time steps ranges for all data within 5+/-5% of the minimum
 # find roots near to a value then report those ranges. 
 #%%
@@ -413,8 +429,8 @@ def seconds_to_days(time_seconds):
 Fo_interp = interp.interp1d(ol40_x, ol40_Fo)
 data_interp = Fo_interp(distance)
 
-best_time, idx_min, sum_r2 = Best_fit_R2(Fo_diffusion_results,data_interp, dt)
-best_time_days = seconds_to_days(best_time)
+time, idx_min, sum_r2 = Best_fit(Fo_diffusion_results,data_interp, dt)
+
 plt.plot(sum_r2)
 # %%
 # This mentod for estimating time is pretty good but doesnt save enough gradient info. 
@@ -423,25 +439,6 @@ plt.plot(sum_r2)
 time_range = np.where((sum_r2 < sum_r2[idx_min]*1.05))
 min_time = (time_range[0].min()+1)*dt /(60*60*24) #days 
 max_time = (time_range[0].max()+1)*dt/(60*60*24) #days 
-
-ol40 = np.loadtxt("/Users/henry/Python Files/Fe-Mg Diffusion/AZ18_WHT06_ol40_C-Prof.txt")
-ol40_Fo = ol40[:,1]
-ol40_x = ol40[:,0]
-
-num = len(vector_c_in)
-distance =  np.linspace(0, dx_micron*(num), num)
-plt.plot(distance, Fo_diffusion_results[idx_min])
-plt.xlabel("Micron")
-plt.ylabel("Fo")
-#plt.ylim(0.65, 0.81)
-
-
-
-plt.plot(ol40_x , ol40_Fo)
-plt.plot(step_x,step_c)
-
-# %%
-
 # %%
 
 # Sum of the Residuals^2 Write it so that it evaluates it at certain intervals 
