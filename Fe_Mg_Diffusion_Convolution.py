@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import scipy.interpolate as interp
 from numba import jit  #
 from pykrige import OrdinaryKriging
+import mc3
 
 #%matplotlib inline
 
@@ -15,8 +16,8 @@ from pykrige import OrdinaryKriging
 def diffusion_kernel(dt, dx):
     """
     returns the relevant kernel for 1D diffusion and a defivative of the Fo#
-    dt = time step
-    dx = spatial step
+    dt = time step Seconds
+    dx = spatial step Meters
 
     """
     delta = (dt) / ((dx) ** 2)
@@ -56,7 +57,17 @@ def boundary_cond(bounds_c):
 
 
 def step_condition(X_Intervals, Interval_concentrations, dx):
+    """
+    Creates a step function for diffusion models
+    Parameters:
+        X_Intervals - List of tuples - each tuple has start and end point of step
+        Interval_concentrations - list of concentrations coresponding to each interval
+        dx - spacing between x points.
 
+    Returns
+        step_x - array of x coordinates
+        step_c - array of concentrations
+    """
     length = abs(np.max(X_Intervals) - np.min(X_Intervals))
     num_x = int(length / dx)
 
@@ -80,17 +91,6 @@ def step_condition(X_Intervals, Interval_concentrations, dx):
 step = step_condition(((0, 75), (75, 250)), (0.859, 0.882), dx=2.5)
 
 # %%
-
-
-# TODO this function needs to be written to take an input that is either a Mn or Ni concentration or an XFo vector
-# If XFo isnt supplied assume that concentration is in Fo units. If XFo is supplied I should make it an array that is covers the full concentration evolution.
-# I will need a separate Diffusion function for Calcium which will be easier.
-
-# I want to make this function as simple/fast as possible so I should ofload any logic
-# I think the best way to do this is to have a wrapper function.  That runs the diffusion step function
-# This wrapper funtion can be a good way to select the different elements. This could easily be written into a GUI
-
-# First solve the single element diffusion. then solve multiple element
 
 
 def diffusion_step(
@@ -326,18 +326,14 @@ def D_Func_Ca(
 # %%
 
 
-# %%
-
-# %%
-
-# %%
-
-# Enumerate for loop or iterate index number this allows us to input an array of Fo which we can use to compare.
-# Pad should also be able to be iterated through time
-
-
-def timestepper(vector_c_in, vector_Fo_in, diffusivity_function, bounds_c, timesteps):
+def timestepper(
+    vector_c_in, vector_Fo_in, diffusivity_function, bounds_c, timesteps, **kwargs
+):
+    """
+    Iterates multiple diffusion steps
+    """
     kernel_1, kernel_2, delta = diffusion_kernel(dt=dt, dx=dx)
+
     # At the moment only handles Fo but should diffuse other elements too with a little modification
     results = np.zeros((timesteps, len(vector_c_in)))
     for n, _ in enumerate(range(timesteps)):
@@ -358,72 +354,77 @@ def timestepper(vector_c_in, vector_Fo_in, diffusivity_function, bounds_c, times
 
 # %%
 
-fO2 = 1e-7  # 2.006191e-05 # Pa
-EFo = 201000.0  # J/mol
-P = 100000  # 200000000. # Pa
-R = 8.3145  # J/molK
-T = 1200 + 273.15  # T in kelvin
+
+def Best_fit_R2(results, data_interp, dt):
+    # This minimizes for sum of residuals^2
+    # Maybe should be maximizing for likelihood
+
+    residual = results - data_interp
+    sum_r2 = np.sum(residual ** 2, axis=1)
+    idx_min = np.argmin(sum_r2)
+
+    # sum_r2[idx_min] * 1.05
+
+    time = (idx_min + 1) * dt  # seconds
+    time_days = time / (60 * 60 * 24)
+    return time, idx_min, sum_r2
 
 
-# EFo=201000 should be +/- 8000
+def Chi_Squared(results, data_interp, sigma, dt):
+    # This minimizes for sum of residuals^2/sigma
 
-D_FO_Func = D_Fo(
-    T=T,
-    P=P,
-    fO2=fO2,
-    alpha=90,
-    beta=90,
-    gamma=0,
-    XFo=None,
-    EFo=201000,
-)
+    residual = results - data_interp
+    sum_r2 = np.sum((residual ** 2) / sigma, axis=1)
+    idx_max = np.argmin(sum_r2)
 
-dx_micron = 2.5
-dx = dx_micron * 1e-6  # m
-dt = 4000  # 100000
-Di = D_FO_Func(0.8)
-# Check for obeying the CFL Condition
-CFL = (dt * Di) / (dx ** 2)
-print(CFL)
-# delta = (dt)/ ((dx) ** 2)
+    time = (idx_min + 1) * dt  # seconds
+    time_days = time / (60 * 60 * 24)
+    return time, idx_min, sum_r2
 
-# (vector_c_in, vector_Fo_in, diffusivity_function, bounds_c, timesteps)
-# vector_c_in, vector_Fo_in, diffusivity_function, diff_kernel_1, der_kernel_2, delta, bounds_c, bounds_Fo
-#  Step funct - Maybe write to move inflection point X_Intervals, Interval_concentrations, dx
-# Temperature is the biggest error in the Diffusivity. Maybe I can include the error in other Params too with Tau
-# Maybe plot the trace of best fits?
-"""
-I need at least 2 functions:
-- One to set up fixed parameters
-- One to set up parameters that will vary in the MCMC
-"""
+
+# %%
+# Write Pad function. Each Step needs a pad
+# 1) Constant Boundary - Diffusion
+# 2) Constant Boundary - No_Diffusion at edge
+# 3) Changing Boundary - Ascent Path
 # %%
 
 
-def Diffusion_Setup(
-    dx_micron,
-    dt,
-    alpha,
-    beta,
-    gamma,
+# %%
+
+
+def Krige_Interpolate(
+    X, Y, new_X, variogram_parameters={"sill": 1e3, "range": 1e2, "nugget": 0.0001}
 ):
+    uk = OrdinaryKriging(
+        X,
+        np.zeros(X.shape),
+        Y,
+        pseudo_inv=True,
+        # weight=True,
+        # nlags=10,
+        variogram_model="gaussian",
+        # exact_values = False,
+        # variogram_model="linear", variogram_parameters={'slope': 5e-18, 'nugget': 6e-7}
+        # variogram_model="gaussian",
+        variogram_parameters=variogram_parameters,
+    )
 
-    """
-    Returns a dict of all fixed parameters for MCMC Diffusion modeling
-    """
-    dx = dx_micron * 1e-6  # m
+    y_pred, y_std = uk.execute("grid", new_X, np.array([0.0]))
+    y_pred = np.squeeze(y_pred)
+    y_std = np.squeeze(y_std)
 
-    D_FO_Dict = {"alpha": alpha, "beta": beta, "gamma": gamma}
-
-    CFL = (dt * Di) / (dx ** 2)
-    print(CFL)
+    return new_X, y_pred, y_std
 
 
-# ((0, inflect_x), (inflect_x, 250)), (0.859, 0.882), dx_micron
-# = 90  # Microns to the inflection point
+X_interp, Y_Interp, Y_interp_std = Krige_Interpolate(ol40_x, ol40_Fo, step_x)
 
-
+plt.plot(ol40_x, ol40_Fo)
+plt.plot(step_x, Y_Interp)
+plt.plot(step_x, Y_Interp + 2 * Y_interp_std)
+plt.plot(step_x, Y_Interp - 2 * Y_interp_std)
 # %%
+
 """
 Find max time steps from 3 point diffusion model 
 1   
@@ -461,15 +462,17 @@ def Diffusion_call(
     # sets up a single stairstep for diffusion models
     X_Intervals = ((edge_x1, inflect_x), (inflect_x, edge_x2))
     Interval_concentrations = (edge_c, center_c)
-    step_x, step_c = step_condition(X_Intervals, Interval_concentrations, dx)
-
+    step_x, step_c = step_condition(X_Intervals, Interval_concentrations, dx_micron)
     #  Only implmented for Fo# Zoning at the moment.
+
     Fo_diffusion_results = timestepper(
         vector_c_in=step_c,
         vector_Fo_in=step_c,
         diffusivity_function=D_FO_Func,
         bounds_c=(edge_c, center_c),
         timesteps=timesteps,
+        dx=dx,
+        dt=dt,
     )
 
     time, idx_min, sum_r2 = Best_fit_R2(Fo_diffusion_results, data_interp, dt)
@@ -478,30 +481,35 @@ def Diffusion_call(
 
 
 # %%
-inflection_x = 90
-edge_x1 = 0
-edge_x2 = 250
-edge_c = (0.859,)
-center_c = 0.882
 
-alpha = 0
-beta = 90
-gamma = 90
+fO2 = 1e-7  # 2.006191e-05 # Pa
+EFo = 201000.0  # J/mol
+P = 100000  # 200000000. # Pa
+R = 8.3145  # J/molK
+T = 1200 + 273.15  # T in kelvin
 
 
-p = (T, P, fO2, inflection_x, edge_x1, edge_x2, edge_c, center_c)
-Diffusion_call(
-    p,
-    alpha,
-    beta,
-    gamma,
-    EFo,
-    timesteps,  # I should calcualte the max timesteps based on the slowest diffusivity I expect.
-    data_interp,
-    dx_micron,
-    dt,
+# EFo=201000 should be +/- 8000
+
+D_FO_Func = D_Fo(
+    T=T,
+    P=P,
+    fO2=fO2,
+    alpha=90,
+    beta=90,
+    gamma=0,
+    XFo=None,
+    EFo=201000,
 )
 
+dx_micron = 2.5
+dx = dx_micron * 1e-6  # m
+dt = 4000  # 100000
+Di = D_FO_Func(0.8)
+# Check for obeying the CFL Condition
+CFL = (dt * Di) / (dx ** 2)
+print(CFL)
+# delta = (dt)/ ((dx) ** 2)
 
 # %%
 
@@ -550,63 +558,6 @@ Fo_diffusion_results = timestepper(
 Fo_diffusion_results[-1]
 # %%
 
-
-num = len(vector_c_in)
-distance = np.linspace(0, dx_micron * (num), num)
-plt.plot(distance, Fo_diffusion_results[4572])
-plt.xlabel("Micron")
-plt.ylabel("Fo")
-# plt.ylim(0.65, 0.81)
-
-ol40 = np.loadtxt(
-    "/Users/henry/Python Files/Fe-Mg Diffusion/AZ18_WHT06_ol40_C-Prof.txt"
-)
-ol40_Fo = ol40[:, 1]
-ol40_x = ol40[:, 0]
-
-plt.plot(ol40_x, ol40_Fo)
-plt.plot(step_x, step_c)
-
-# %%
-
-#%%
-# In the AM write code to make a PDF for all data.
-
-
-def Best_fit_R2(results, data_interp, dt):
-    # This minimizes for sum of residuals^2
-    # Maybe should be maximizing for likelihood
-
-    residual = results - data_interp
-    sum_r2 = np.sum(residual ** 2, axis=1)
-    idx_min = np.argmin(sum_r2)
-
-    # sum_r2[idx_min] * 1.05
-
-    time = (idx_min + 1) * dt  # seconds
-    time_days = time / (60 * 60 * 24)
-    return time, idx_min, sum_r2
-
-
-def Best_fit_Liklihood(results, data_interp, sigma, dt):
-    # This minimizes for sum of residuals^2
-    # Maybe should be maximizing for likelihood
-
-    residual = results - data_interp
-    sum_r2 = np.sum(residual ** 2, axis=1)
-    idx_max = np.argmin(sum_r2)
-
-    # sum_r2[idx_min] * 1.05
-
-    time = (idx_min + 1) * dt  # seconds
-    time_days = time / (60 * 60 * 24)
-    return time, idx_min, sum_r2
-
-
-# Find a way to return time steps ranges for all data within 5+/-5% of the minimum
-# find roots near to a value then report those ranges.
-#%%
-
 # To fit data I should interpolate the data to the dx spacing. I might be able to use Kringing to get error bars.
 # Weighted Residuals. Weights will be inverse of STD^2. If STdevs are the same I can use normal functions.
 # Interpolate data to results dx (use Kringing to improve interp )
@@ -625,121 +576,49 @@ min_time = (time_range[0].min() + 1) * dt / (60 * 60 * 24)  # days
 max_time = (time_range[0].max() + 1) * dt / (60 * 60 * 24)  # days
 # %%
 
-# Sum of the Residuals^2 Write it so that it evaluates it at certain intervals
-# Maybe divide timesteps into even amounts and then evaluate every N timesteps.
+num = len(vector_c_in)
+distance = np.linspace(0, dx_micron * (num), num)
+plt.plot(distance, Fo_diffusion_results[4572])
+plt.xlabel("Micron")
+plt.ylabel("Fo")
+# plt.ylim(0.65, 0.81)
 
-# Also think about 2-D diffusion for profiles with no central plateau. A 2D convolution algorithm would be helpful.
-# %%
-# Write Pad function. Each Step needs a pad
-# 1) Constant Boundary - Diffusion
-# 2) Constant Boundary - No_Diffusion at edge
-# 3) Changing Boundary - Ascent Path
-# %%
-
-# This is the Kriging Interpolation I wrote for another code but I should modify it for this to produce an array of interpreded value and errors.
-
-
-# def Krige_Interpolate(
-#     dataframe, sample_name, column_name, SIMS_session=None, label=None
-# ):
-
-#     Sample_df = dataframe.loc[dataframe["sample"] == sample_name]
-#     if SIMS_session is not None:
-#         Sample_df = Sample_df.loc[Sample_df["sims_session"] == SIMS_session]
-#         dataframe = dataframe.loc[dataframe["sims_session"] == SIMS_session]
-
-#     X = Sample_df["time_stamp"].to_numpy(dtype=float)
-#     y = Sample_df[column_name].to_numpy(dtype=float)
-
-#     X = (X[1:] + X[:-1]) / 2
-#     y = (y[1:] + y[:-1]) / 2
-#     X = X[0::2]
-#     y = y[0::2]
-#     uk = OrdinaryKriging(
-#         X,
-#         np.zeros(X.shape),
-#         y,
-#         weight=False,
-#         nlags=6,
-#         # variogram_model="linear",)
-#         # variogram_model="linear", variogram_parameters={'slope': 5e-18, 'nugget': 6e-7})
-#         variogram_model="gaussian",
-#         variogram_parameters={"sill": 1e-4, "range": 9e12, "nugget": 0},
-#     )
-
-#     X_pred = dataframe["time_stamp"].to_numpy(dtype=float)
-#     # uk.display_variogram_model()
-#     # 480000000000.0
-#     # 300000000000.0
-#     # 4000000000000.0
-#     y_pred, y_std = uk.execute("grid", X_pred, np.array([0.0]))
-#     y_pred = np.squeeze(y_pred)
-#     y_std = np.squeeze(y_std)
-
-#     return dataframe["time_stamp"], y_pred, y_std
-
-
-# fig, ax = plt.subplots(figsize=(12, 6))
-
-# X_pred, y_pred, y_std = Krige_Interpolate(
-#     Samples_db, "Herasil", "17_30si_ratio", SIMS_session=1
-# )
-# ax.plot(X_pred, y_pred, label="Predicted values")
-
-# ax.fill_between(
-#     X_pred,
-#     y_pred - 2 * y_std,
-#     y_pred + 2 * y_std,
-#     alpha=0.3,
-#     label="Confidence interval",
-# )
-
-# Sample_plot(
-#     Samples_db, "Herasil", "17_30si_ratio", ax=ax, SIMS_session=1, label="Session 1"
-# )
-
-#%% Single fit function for MCMC
-# Inputs Params = Every parameter that gets varied
-# Best fit modeled data.
-# Maybe there is a way to write best fit times to a seperate time without returning it in the main function.
-
-# I mean I care less about the error on the input parameters than about getting the times variablitiy in times.
-
-# %%
-
-
-def Krige_Interpolate(
-    X, Y, new_X, variogram_parameters={"sill": 1e3, "range": 1e2, "nugget": 0.0001}
-):
-    uk = OrdinaryKriging(
-        X,
-        np.zeros(X.shape),
-        Y,
-        pseudo_inv=True,
-        # weight=True,
-        # nlags=10,
-        variogram_model="gaussian",
-        # exact_values = False,
-        # variogram_model="linear", variogram_parameters={'slope': 5e-18, 'nugget': 6e-7}
-        # variogram_model="gaussian",
-        variogram_parameters=variogram_parameters,
-    )
-
-    y_pred, y_std = uk.execute("grid", new_X, np.array([0.0]))
-    y_pred = np.squeeze(y_pred)
-    y_std = np.squeeze(y_std)
-
-    return new_X, y_pred, y_std
-
-
-X_interp, Y_Interp, Y_interp_std = Krige_Interpolate(ol40_x, ol40_Fo, step_x)
+ol40 = np.loadtxt(
+    "/Users/henry/Python Files/Fe-Mg Diffusion/AZ18_WHT06_ol40_C-Prof.txt"
+)
+ol40_Fo = ol40[:, 1]
+ol40_x = ol40[:, 0]
 
 plt.plot(ol40_x, ol40_Fo)
-plt.plot(step_x, Y_Interp)
-plt.plot(step_x, Y_Interp + 2 * Y_interp_std)
-plt.plot(step_x, Y_Interp - 2 * Y_interp_std)
+plt.plot(step_x, step_c)
 # %%
 
+
 # %%
+inflection_x = 90
+edge_x1 = 0
+edge_x2 = 250
+edge_c = 0.859
+center_c = 0.882
+
+alpha = 0
+beta = 90
+gamma = 90
+
+Total_time = 500 * 24 * 60 * 60  # seconds
+timesteps = int(Total_time / dt)
+
+p = (T, P, fO2, inflection_x, edge_x1, edge_x2, edge_c, center_c)
+C = Diffusion_call(
+    p,
+    alpha,
+    beta,
+    gamma,
+    EFo,
+    timesteps,  # I should calculate the max timesteps based on the slowest diffusivity I expect.
+    data_interp,
+    dx_micron,
+    dt,
+)
 
 # %%
