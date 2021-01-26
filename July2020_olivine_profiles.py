@@ -1,11 +1,13 @@
 # %%
 # from Users.henry.Python Files.Electrical Conductivity SIMS Data.NS_ConductivityOlivines import Sample_Interpolate
-import Fe_Mg_Diffusion_Convolution
+# import Fe_Mg_Diffusion_Convolution
 import numpy as np
 from matplotlib import pyplot as plt
 import pandas as pd
 from pathlib import Path
 import scipy.interpolate as interp
+
+from pykrige import OrdinaryKriging
 
 
 #%%
@@ -35,10 +37,57 @@ def get_C_prof(prof_name, DF, Element="Fo#"):
 x, y = get_C_prof("AZ18_WHT06_ol41newname_prof_", Ol_Profiles)
 # %%
 for n in Names:
-    fig, ax = plt.subplots()
     x, y = get_C_prof(n, Ol_Profiles)
-    plt.plot(x, y)
-    plt.title(n)
+    if len(x) > 1:
+        fig, ax = plt.subplots()
+        plt.plot(x, y, marker="o", linestyle="dashed")
+        plt.title(n)
+
+
+# %%
+for n in Names:
+    x, y = get_C_prof(n, Ol_Profiles, Element="CaO")
+    if len(x) > 1:
+        fig, ax = plt.subplots()
+        plt.plot(x, y, marker="o", linestyle="dashed")
+        plt.title(n)
+
+# %%
+def plot_2_elements(Sample_name, element_1="Fo#", element_2="CaO"):
+
+    fig, ax1 = plt.subplots()
+    plt.title(Sample_name)
+    color = "tab:red"
+    ax1.set_xlabel("Micron (µm)")
+    ax1.set_ylabel(element_1, color=color)
+
+    x_1, y_1 = get_C_prof(Sample_name, Ol_Profiles, Element=element_1)
+    ax1.plot(x_1, y_1, color=color, marker="o", linestyle="dashed")
+    ax1.tick_params(axis="y", labelcolor=color)
+
+    ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis
+
+    color = "tab:blue"
+    ax2.set_ylabel(element_2, color=color)
+    x_2, y_2 = get_C_prof(Sample_name, Ol_Profiles, Element=element_2)
+    ax2.plot(x_2, y_2, color=color, marker="s", linestyle="dashed")
+    ax2.tick_params(axis="y", labelcolor=color)
+
+    fig.tight_layout()  # otherwise the right y-label is slightly clipped
+
+    return fig, ax1, ax2
+
+
+# %%
+
+for n in Names:
+    x, y = get_C_prof(n, Ol_Profiles)
+    if len(x) > 1:
+        plot_2_elements(Sample_name=n, element_1="Fo#", element_2="CaO")
+        plot_2_elements(Sample_name=n, element_1="Al2O3", element_2="P2O5")
+        plot_2_elements(Sample_name=n, element_1="NiO", element_2="MnO")
+
+
 # %%
 
 # Diffusion model constants # change eventually
@@ -192,4 +241,40 @@ plt.title(Title)
 model_time = "Best fit time: " + str(round(best_time_days, 2)) + " days"
 plt.annotate(s=model_time, xy=(0.8, 0.05), xycoords="axes fraction")
 plt.legend()
+# %%
+
+
+def Krige_Interpolate(X, Y, new_X):
+    uk = OrdinaryKriging(
+        X,
+        np.zeros(X.shape),
+        Y,
+        pseudo_inv=True,
+        weight=True,
+        # nlags=3,
+        # exact_values=False,
+        variogram_model="linear",
+        variogram_parameters={"slope": 3e-5, "nugget": 0.0002}
+        # variogram_model="gaussian",
+        # variogram_parameters={"sill": 1e2, "range": 1e2, "nugget": 0.0006},
+    )
+
+    y_pred, y_std = uk.execute("grid", new_X, np.array([0.0]), backend="loop")
+    y_pred = np.squeeze(y_pred)
+    y_std = np.squeeze(y_std)
+
+    return new_X, y_pred, y_std
+
+
+x, y = get_C_prof("AZ18_WHT06_ol41newname_prof_", Ol_Profiles, Element="Fo#")
+step_x = np.arange(0, x.max(), 1)
+
+X_interp, Y_Interp, Y_interp_std = Krige_Interpolate(x, y, step_x)
+
+plt.plot(x, y, marker=".")
+plt.plot(step_x, Y_Interp)
+plt.plot(step_x, Y_Interp + 3 * Y_interp_std)
+plt.plot(step_x, Y_Interp - 3 * Y_interp_std)
+# %%
+
 # %%

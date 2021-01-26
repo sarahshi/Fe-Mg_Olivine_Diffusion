@@ -5,6 +5,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import scipy.interpolate as interp
 from numba import jit  #
+from pykrige import OrdinaryKriging
 
 #%matplotlib inline
 
@@ -89,6 +90,8 @@ step = step_condition(((0, 75), (75, 250)), (0.859, 0.882), dx=2.5)
 # I think the best way to do this is to have a wrapper function.  That runs the diffusion step function
 # This wrapper funtion can be a good way to select the different elements. This could easily be written into a GUI
 
+# First solve the single element diffusion. then solve multiple element
+
 
 def diffusion_step(
     vector_c_in,
@@ -161,7 +164,7 @@ def FO2(T, P, Buffer):
     return None
 
 
-def D_Fo(T, P, fO2, alpha, beta, gamma, XFo=None, EFo=201000, R=8.3145):
+def D_Fo(T, P, fO2, alpha, beta, gamma, XFo=None, EFo=201000):
     """
     Function that calculates the diffusivity for Forsterite (and Mn) in olivine.
     Returns a function that only requires XFo = XMg/(XMg+XFe)
@@ -189,6 +192,7 @@ def D_Fo(T, P, fO2, alpha, beta, gamma, XFo=None, EFo=201000, R=8.3145):
 
     def D_Func_Fo(XFo):
         """Returns diffusivity and derivative of diffusivity at each point in an olivine for a given oxygen fugacity, proportion of forsterite, activation energy, pressure, gas constant, temperature, and crystallographic orientation. """
+        R = 8.3145
         tenterm = 10 ** -9.21
         fugacityterm = (fO2 / (1e-7)) ** (1.0 / 6.0)
         forsteriteterm = 10 ** (3.0 * (0.9 - XFo))
@@ -214,7 +218,7 @@ def D_Fo(T, P, fO2, alpha, beta, gamma, XFo=None, EFo=201000, R=8.3145):
     return D_Func_Fo
 
 
-def D_Ni(T, P, fO2, alpha, beta, gamma, XFo=None, EFo=220000, R=8.3145):
+def D_Ni(T, P, fO2, alpha, beta, gamma, XFo=None, EFo=220000):
     """
     Function that calculates the diffusivity for Mn in olivine.
     Returns a function that only requires XFo = XMg/(XMg+XFe)
@@ -242,6 +246,7 @@ def D_Ni(T, P, fO2, alpha, beta, gamma, XFo=None, EFo=220000, R=8.3145):
 
     def D_Func_Ni(XFo):
         """Returns diffusivity and derivative of diffusivity at each point in an olivine for a given oxygen fugacity, proportion of forsterite, activation energy, pressure, gas constant, temperature, and crystallographic orientation. """
+        R = 8.3145
         tenterm = 3.84 * 10 ** -9
         fugacityterm = (fO2 / (1e-6)) ** (1.0 / 4.25)
         forsteriteterm = 10 ** (1.5 * (0.9 - XFo))
@@ -263,12 +268,18 @@ def D_Ni(T, P, fO2, alpha, beta, gamma, XFo=None, EFo=220000, R=8.3145):
         return Di  # units of m2/s
 
     if XFo is not None:
-        return D_Func_Fo(XFo)
+        return D_Func_Ni(XFo)
 
     return D_Func_Ni
 
 
-def D_Func_Ca(T, fO2, alpha, beta, gamma, R=8.3145):
+def D_Func_Ca(
+    T,
+    fO2,
+    alpha,
+    beta,
+    gamma,
+):
     """
     Function that calculates the diffusivity for Mn in olivine.
     Returns a function that only requires XFo = XMg/(XMg+XFe)
@@ -286,13 +297,13 @@ def D_Func_Ca(T, fO2, alpha, beta, gamma, R=8.3145):
         beta, - minimum angle to [010] axis b
         gamma - minimum angle to [001] axis c
 
-    Returns: Diffusivity function That's only input it is:
+    Returns: Diffusivity function That's only input is XFo:
                 XFo, - Forsterite in Fractional Units This can be a numpy array of the data.
 
                 If XFo is given as an input a diffusivity or an array of diffusivities is returned.
                 Diffusivity returned in m2/s):
     """
-
+    R = 8.3145
     fugacityterm = (fO2 / (1e-7)) ** (0.3)
 
     Da = 16.59 * 10 ** -12 * fugacityterm * np.exp(-(193000) / (R * T))
@@ -329,8 +340,7 @@ def timestepper(vector_c_in, vector_Fo_in, diffusivity_function, bounds_c, times
     kernel_1, kernel_2, delta = diffusion_kernel(dt=dt, dx=dx)
     # At the moment only handles Fo but should diffuse other elements too with a little modification
     results = np.zeros((timesteps, len(vector_c_in)))
-    n = 0
-    for time in range(timesteps):
+    for n, _ in enumerate(range(timesteps)):
         vector_c_in = diffusion_step(
             vector_c_in=vector_c_in,
             vector_Fo_in=vector_Fo_in,
@@ -343,7 +353,6 @@ def timestepper(vector_c_in, vector_Fo_in, diffusivity_function, bounds_c, times
         )
         vector_Fo_in = vector_c_in
         results[n] = vector_Fo_in
-        n = n + 1
     return results
 
 
@@ -356,8 +365,17 @@ R = 8.3145  # J/molK
 T = 1200 + 273.15  # T in kelvin
 
 
+# EFo=201000 should be +/- 8000
+
 D_FO_Func = D_Fo(
-    T=T, P=P, fO2=fO2, alpha=90, beta=90, gamma=0, XFo=None, EFo=201000, R=8.3145
+    T=T,
+    P=P,
+    fO2=fO2,
+    alpha=90,
+    beta=90,
+    gamma=0,
+    XFo=None,
+    EFo=201000,
 )
 
 dx_micron = 2.5
@@ -374,27 +392,116 @@ print(CFL)
 #  Step funct - Maybe write to move inflection point X_Intervals, Interval_concentrations, dx
 # Temperature is the biggest error in the Diffusivity. Maybe I can include the error in other Params too with Tau
 # Maybe plot the trace of best fits?
-def Diffusion_call():
-    D_FO_Func = D_Fo(
-        T=T, P=P, fO2=fO2, alpha=90, beta=90, gamma=0, XFo=None, EFo=201000, R=8.3145
-    )
-    inflection_x = 90  # Microns to the inflection point
-    step_x, step_c = step_condition(
-        ((0, inflect_x), (inflect_x, 250)), (0.859, 0.882), dx_micron
-    )
-    X_Intervals, Interval_concentrations, dx
+"""
+I need at least 2 functions:
+- One to set up fixed parameters
+- One to set up parameters that will vary in the MCMC
+"""
+# %%
 
+
+def Diffusion_Setup(
+    dx_micron,
+    dt,
+    alpha,
+    beta,
+    gamma,
+):
+
+    """
+    Returns a dict of all fixed parameters for MCMC Diffusion modeling
+    """
+    dx = dx_micron * 1e-6  # m
+
+    D_FO_Dict = {"alpha": alpha, "beta": beta, "gamma": gamma}
+
+    CFL = (dt * Di) / (dx ** 2)
+    print(CFL)
+
+
+# ((0, inflect_x), (inflect_x, 250)), (0.859, 0.882), dx_micron
+# = 90  # Microns to the inflection point
+
+
+# %%
+"""
+Find max time steps from 3 point diffusion model 
+1   
+"""
+# TODO Sort Variables by whether they will be sampled with PyMC or not.
+# Write subfunctions to handle general and specific Diffusion model set ups.
+
+
+def Diffusion_call(
+    p,
+    alpha,
+    beta,
+    gamma,
+    EFo,
+    timesteps,  # I should calcualte the max timesteps based on the slowest diffusivity I expect.
+    data_interp,
+    dx_micron,
+    dt,
+    **kwargs
+):
+
+    T, P, fO2, inflection_x, edge_x1, edge_x2, edge_c, center_c = p
+
+    D_FO_Func = D_Fo(
+        T=T,
+        P=P,
+        fO2=fO2,
+        alpha=alpha,
+        beta=beta,
+        gamma=gamma,
+        EFo=EFo,
+    )
+    dx = dx_micron * 1e-6  # m
+
+    # sets up a single stairstep for diffusion models
+    X_Intervals = ((edge_x1, inflect_x), (inflect_x, edge_x2))
+    Interval_concentrations = (edge_c, center_c)
+    step_x, step_c = step_condition(X_Intervals, Interval_concentrations, dx)
+
+    #  Only implmented for Fo# Zoning at the moment.
     Fo_diffusion_results = timestepper(
-        vector_c_in=vector_c_in,
-        vector_Fo_in=vector_Fo_in,
+        vector_c_in=step_c,
+        vector_Fo_in=step_c,
         diffusivity_function=D_FO_Func,
-        bounds_c=bounds_c,
+        bounds_c=(edge_c, center_c),
         timesteps=timesteps,
     )
-    return None
+
+    time, idx_min, sum_r2 = Best_fit_R2(Fo_diffusion_results, data_interp, dt)
+
+    return Fo_diffusion_results[idx_min]
 
 
-### This function is mostly what I need to finish this.
+# %%
+inflection_x = 90
+edge_x1 = 0
+edge_x2 = 250
+edge_c = (0.859,)
+center_c = 0.882
+
+alpha = 0
+beta = 90
+gamma = 90
+
+
+p = (T, P, fO2, inflection_x, edge_x1, edge_x2, edge_c, center_c)
+Diffusion_call(
+    p,
+    alpha,
+    beta,
+    gamma,
+    EFo,
+    timesteps,  # I should calcualte the max timesteps based on the slowest diffusivity I expect.
+    data_interp,
+    dx_micron,
+    dt,
+)
+
 
 # %%
 
@@ -474,7 +581,7 @@ def Best_fit_R2(results, data_interp, dt):
     sum_r2 = np.sum(residual ** 2, axis=1)
     idx_min = np.argmin(sum_r2)
 
-    sum_r2[idx_min] * 1.05
+    # sum_r2[idx_min] * 1.05
 
     time = (idx_min + 1) * dt  # seconds
     time_days = time / (60 * 60 * 24)
@@ -489,7 +596,7 @@ def Best_fit_Liklihood(results, data_interp, sigma, dt):
     sum_r2 = np.sum(residual ** 2, axis=1)
     idx_max = np.argmin(sum_r2)
 
-    sum_r2[idx_min] * 1.05
+    # sum_r2[idx_min] * 1.05
 
     time = (idx_min + 1) * dt  # seconds
     time_days = time / (60 * 60 * 24)
@@ -597,3 +704,42 @@ max_time = (time_range[0].max() + 1) * dt / (60 * 60 * 24)  # days
 # Maybe there is a way to write best fit times to a seperate time without returning it in the main function.
 
 # I mean I care less about the error on the input parameters than about getting the times variablitiy in times.
+
+# %%
+
+
+def Krige_Interpolate(
+    X, Y, new_X, variogram_parameters={"sill": 1e3, "range": 1e2, "nugget": 0.0001}
+):
+    uk = OrdinaryKriging(
+        X,
+        np.zeros(X.shape),
+        Y,
+        pseudo_inv=True,
+        # weight=True,
+        # nlags=10,
+        variogram_model="gaussian",
+        # exact_values = False,
+        # variogram_model="linear", variogram_parameters={'slope': 5e-18, 'nugget': 6e-7}
+        # variogram_model="gaussian",
+        variogram_parameters=variogram_parameters,
+    )
+
+    y_pred, y_std = uk.execute("grid", new_X, np.array([0.0]))
+    y_pred = np.squeeze(y_pred)
+    y_std = np.squeeze(y_std)
+
+    return new_X, y_pred, y_std
+
+
+X_interp, Y_Interp, Y_interp_std = Krige_Interpolate(ol40_x, ol40_Fo, step_x)
+
+plt.plot(ol40_x, ol40_Fo)
+plt.plot(step_x, Y_Interp)
+plt.plot(step_x, Y_Interp + 2 * Y_interp_std)
+plt.plot(step_x, Y_Interp - 2 * Y_interp_std)
+# %%
+
+# %%
+
+# %%
