@@ -356,8 +356,7 @@ def timestepper(
 
 
 def Best_fit_R2(results, data_interp, dt):
-    # This minimizes for sum of residuals^2
-    # Maybe should be maximizing for likelihood
+    # Should be Chi2 but looks more like likelihood?
 
     residual = results - data_interp
     sum_r2 = np.sum(residual ** 2, axis=1)
@@ -370,16 +369,16 @@ def Best_fit_R2(results, data_interp, dt):
     return time, idx_min, sum_r2
 
 
-def Chi_Squared(results, data_interp, sigma, dt):
+def Best_fit_Chi2(results, data_interp, sigma, dt, sigma_min=1e-4):
     # This minimizes for sum of residuals^2/sigma
 
     residual = results - data_interp
-    sum_r2 = np.sum((residual ** 2) / sigma, axis=1)
-    idx_max = np.argmin(sum_r2)
+    sum_r2 = np.sum((residual ** 2) / (sigma + sigma_min) ** 2, axis=1)
+    idx_max = np.argmax(sum_r2)
 
-    time = (idx_min + 1) * dt  # seconds
+    time = (idx_max + 1) * dt  # seconds
     time_days = time / (60 * 60 * 24)
-    return time, idx_min, sum_r2
+    return time, idx_max, sum_r2
 
 
 # %%
@@ -394,20 +393,23 @@ def Chi_Squared(results, data_interp, sigma, dt):
 
 
 def Krige_Interpolate(
-    X, Y, new_X, variogram_parameters={"sill": 1e3, "range": 1e2, "nugget": 0.0001}
+    X, Y, new_X, variogram_parameters={"slope": 1e-4, "nugget": 1e-5}
 ):
+    # X, Y, new_X, variogram_parameters={"sill": 1e3, "range": 1e2, "nugget": 0.0001}
+
     uk = OrdinaryKriging(
         X,
         np.zeros(X.shape),
         Y,
         pseudo_inv=True,
         # weight=True,
-        # nlags=10,
-        variogram_model="gaussian",
-        # exact_values = False,
-        # variogram_model="linear", variogram_parameters={'slope': 5e-18, 'nugget': 6e-7}
+        # nlags=2,
         # variogram_model="gaussian",
-        variogram_parameters=variogram_parameters,
+        # exact_values = False,
+        variogram_model="linear",
+        variogram_parameters=variogram_parameters
+        # variogram_model="gaussian",
+        # variogram_parameters=variogram_parameters,
     )
 
     y_pred, y_std = uk.execute("grid", new_X, np.array([0.0]))
@@ -441,12 +443,14 @@ def Diffusion_call(
     EFo,
     timesteps,  # I should calcualte the max timesteps based on the slowest diffusivity I expect.
     data_interp,
+    std_interp,
     dx_micron,
     dt,
+    output_full=False,
     **kwargs
 ):
 
-    T, P, fO2, inflection_x, edge_x1, edge_x2, edge_c, center_c = p
+    T, P, fO2, inflect_x, edge_x1, edge_x2, edge_c, center_c = p
 
     D_FO_Func = D_Fo(
         T=T,
@@ -475,8 +479,13 @@ def Diffusion_call(
         dt=dt,
     )
 
-    time, idx_min, sum_r2 = Best_fit_R2(Fo_diffusion_results, data_interp, dt)
+    time, idx_min, sum_r2 = Best_fit_Chi2(
+        Fo_diffusion_results, data_interp, std_interp, dt, **kwargs
+    )
 
+    # time, idx_min, sum_r2 = Best_fit_R2(Fo_diffusion_results, data_interp, dt)
+    if output_full:
+        return time, idx_min, sum_r2, Fo_diffusion_results
     return Fo_diffusion_results[idx_min]
 
 
@@ -530,7 +539,7 @@ Kd for Olivine that have lost central concentration
 inflect_x = 90  # Microns to the inflection point
 
 step_x, step_c = step_condition(
-    ((0, inflect_x), (inflect_x, 250)), (0.859, 0.882), dx_micron
+    ((0, inflect_x), (inflect_x, 270)), (0.859, 0.882), dx_micron
 )
 bounds_c = (step_c[0], step_c[-1])
 
@@ -565,8 +574,12 @@ Fo_interp = interp.interp1d(ol40_x, ol40_Fo)
 data_interp = Fo_interp(distance)
 
 time, idx_min, sum_r2 = Best_fit_R2(Fo_diffusion_results, data_interp, dt)
+time2, idx_max, sum_chi2 = Best_fit_Chi2(
+    Fo_diffusion_results, data_interp, std_interp, dt
+)
 
 plt.plot(sum_r2)
+
 # %%
 # This mentod for estimating time is pretty good but doesnt save enough gradient info.
 # depending on how I set up MCMC I need to think how the gradient gets inputted.
@@ -579,6 +592,7 @@ max_time = (time_range[0].max() + 1) * dt / (60 * 60 * 24)  # days
 num = len(vector_c_in)
 distance = np.linspace(0, dx_micron * (num), num)
 plt.plot(distance, Fo_diffusion_results[4572])
+plt.plot(distance, Fo_diffusion_results[idx_min])
 plt.xlabel("Micron")
 plt.ylabel("Fo")
 # plt.ylim(0.65, 0.81)
@@ -592,24 +606,52 @@ ol40_x = ol40[:, 0]
 plt.plot(ol40_x, ol40_Fo)
 plt.plot(step_x, step_c)
 # %%
+Fo_interp = interp.interp1d(ol40_x, ol40_Fo)
+data_interp = Fo_interp(distance)
+
+X_interp, Y_interp, Y_interp_std = Krige_Interpolate(
+    ol40_x,
+    ol40_Fo,
+    step_x,
+    variogram_parameters={"slope": 1e-4, "nugget": 2e-4},
+)
+
+plt.plot(ol40_x, ol40_Fo, marker="o")
+plt.plot(step_x, Y_interp)
+plt.plot(step_x, Y_interp + 2 * Y_interp_std + 0.00001)
+plt.plot(step_x, Y_interp - 2 * Y_interp_std - 0.00001)
 
 
 # %%
+dx_micron = 2.5
+dt = 4000
+
+
+fO2 = 1e-7  # 2.006191e-05 # Pa
+EFo = 201000.0  # J/mol
+P = 100000  # 200000000. # Pa
+R = 8.3145  # J/molK
+T = 1250 + 273.15  # 1200 + 273.15  # T in kelvin
+
+
 inflection_x = 90
 edge_x1 = 0
-edge_x2 = 250
-edge_c = 0.859
-center_c = 0.882
+edge_x2 = 270
+edge_c = 0.8584
+center_c = 0.8815
 
-alpha = 0
+alpha = 90
 beta = 90
-gamma = 90
+gamma = 0
+
+data_interp = Y_interp
+std_interp = Y_interp_std
 
 Total_time = 500 * 24 * 60 * 60  # seconds
 timesteps = int(Total_time / dt)
 
 p = (T, P, fO2, inflection_x, edge_x1, edge_x2, edge_c, center_c)
-C = Diffusion_call(
+time, idx_min, sum_r2, Fo_diffusion_results = Diffusion_call(
     p,
     alpha,
     beta,
@@ -617,8 +659,28 @@ C = Diffusion_call(
     EFo,
     timesteps,  # I should calculate the max timesteps based on the slowest diffusivity I expect.
     data_interp,
+    std_interp,
     dx_micron,
     dt,
+    output_full=True,
 )
 
+# %%
+plt.plot(X_interp, data_interp)
+
+plt.plot(X_interp, Fo_diffusion_results[idx_min])
+plt.plot(X_interp, Fo_diffusion_results[3842])
+# %%
+Z = Best_fit_Chi2(C[3], data_interp, Y_interp_std, dt, sigma_min=5e-4)
+V = Best_fit_R2(C[3], data_interp, dt)
+# %%
+# %%
+
+reduced_chi = Z[2] / Z[2].min()
+time_range = np.where(reduced_chi.round(3) == 2)[0]
+# %%
+time_range * dt / (60 * 60 * 24)
+# %%
+# sum_r2_1200 = sum_r2
+sum_r2_1250 = sum_r2
 # %%

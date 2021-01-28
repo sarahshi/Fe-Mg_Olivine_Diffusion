@@ -6,6 +6,8 @@ from matplotlib import pyplot as plt
 import pandas as pd
 from pathlib import Path
 import scipy.interpolate as interp
+from matplotlib.backends.backend_pdf import PdfPages
+
 
 from pykrige import OrdinaryKriging
 
@@ -83,10 +85,24 @@ def plot_2_elements(Sample_name, element_1="Fo#", element_2="CaO"):
 for n in Names:
     x, y = get_C_prof(n, Ol_Profiles)
     if len(x) > 1:
-        plot_2_elements(Sample_name=n, element_1="Fo#", element_2="CaO")
-        plot_2_elements(Sample_name=n, element_1="Al2O3", element_2="P2O5")
-        plot_2_elements(Sample_name=n, element_1="NiO", element_2="MnO")
+        with PdfPages(n + " multielement_pdf.pdf") as pdf:
+            fig, ax1, ax2 = plot_2_elements(
+                Sample_name=n, element_1="Fo#", element_2="CaO"
+            )
+            pdf.savefig()
+            plt.close()
 
+            fig, ax1, ax2 = plot_2_elements(
+                Sample_name=n, element_1="Al2O3", element_2="P2O5"
+            )
+            pdf.savefig()
+            plt.close()
+
+            fig, ax1, ax2 = plot_2_elements(
+                Sample_name=n, element_1="NiO", element_2="MnO"
+            )
+            pdf.savefig()
+            plt.close()
 
 # %%
 
