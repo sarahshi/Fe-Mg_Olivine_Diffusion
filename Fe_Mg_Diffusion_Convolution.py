@@ -8,8 +8,16 @@ from numba import jit  #
 from pykrige import OrdinaryKriging
 import mc3
 
-#%matplotlib inline
+%matplotlib inline
+#%%
+ol40 = np.loadtxt(
+    "/Users/henry/Python Files/Fe-Mg Diffusion/AZ18_WHT06_ol40_C-Prof.txt"
+)
+ol40_Fo = ol40[:, 1]
+ol40_x = ol40[:, 0]
 
+plt.plot(ol40_x, ol40_Fo)
+plt.plot(step_x, step_c)
 # %%
 
 
@@ -374,11 +382,11 @@ def Best_fit_Chi2(results, data_interp, sigma, dt, sigma_min=1e-4):
 
     residual = results - data_interp
     sum_r2 = np.sum((residual ** 2) / (sigma + sigma_min) ** 2, axis=1)
-    idx_max = np.argmax(sum_r2)
+    idx_min = np.argmin(sum_r2)
 
-    time = (idx_max + 1) * dt  # seconds
+    time = (idx_min + 1) * dt  # seconds
     time_days = time / (60 * 60 * 24)
-    return time, idx_max, sum_r2
+    return time, idx_min, sum_r2
 
 
 # %%
@@ -418,7 +426,7 @@ def Krige_Interpolate(
 
     return new_X, y_pred, y_std
 
-
+#%%
 X_interp, Y_Interp, Y_interp_std = Krige_Interpolate(ol40_x, ol40_Fo, step_x)
 
 plt.plot(ol40_x, ol40_Fo)
@@ -596,7 +604,7 @@ plt.plot(distance, Fo_diffusion_results[idx_min])
 plt.xlabel("Micron")
 plt.ylabel("Fo")
 # plt.ylim(0.65, 0.81)
-
+#%%
 ol40 = np.loadtxt(
     "/Users/henry/Python Files/Fe-Mg Diffusion/AZ18_WHT06_ol40_C-Prof.txt"
 )
@@ -669,10 +677,13 @@ time, idx_min, sum_r2, Fo_diffusion_results = Diffusion_call(
 plt.plot(X_interp, data_interp)
 
 plt.plot(X_interp, Fo_diffusion_results[idx_min])
-plt.plot(X_interp, Fo_diffusion_results[3842])
+plt.plot(X_interp, Fo_diffusion_results[0])
+#plt.plot(X_interp, Fo_diffusion_results[1779])
+#plt.plot(X_interp, Fo_diffusion_results[3934])
+#plt.plot(X_interp, Fo_diffusion_results[3842])
 # %%
-Z = Best_fit_Chi2(C[3], data_interp, Y_interp_std, dt, sigma_min=5e-4)
-V = Best_fit_R2(C[3], data_interp, dt)
+Z = Best_fit_Chi2(Fo_diffusion_results, data_interp, Y_interp_std, dt, sigma_min=1e-4)
+V = Best_fit_R2(Fo_diffusion_results, data_interp, dt)
 # %%
 # %%
 
@@ -684,3 +695,9 @@ time_range * dt / (60 * 60 * 24)
 # sum_r2_1200 = sum_r2
 sum_r2_1250 = sum_r2
 # %%
+
+#141 312 208
+
+# %%
+
+
