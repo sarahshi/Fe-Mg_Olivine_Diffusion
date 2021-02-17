@@ -11,15 +11,17 @@ from matplotlib.backends.backend_pdf import PdfPages
 
 from pykrige import OrdinaryKriging
 
+# %%
+import Fe_Mg_Diffusion_Convolution as Ol_Diff
 
 #%%
 
-excel_path = "/Users/henry/Documents/Research/Mantle Xenoliths/AZ18 Samples/Microprobe Feb 2021/Feb 2021_EMP_GCB.xlsx"
+excel_path = "Feb 2021_EMP_GCB_version_2_16_20.xlsx"
 
 Ol_Profiles = pd.read_excel(
     excel_path,
-    sheet_name="Cleaned_Data_Henry",
-    header=60,
+    sheet_name="Sorted",
+    #header=60,
     index_col="DataSet/Point",
     engine="openpyxl",
 )

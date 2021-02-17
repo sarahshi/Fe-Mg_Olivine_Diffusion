@@ -1,14 +1,14 @@
-# %%
+# %% 
 # from scipy.optimize import fsolve, root
 import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import scipy.interpolate as interp
-from numba import jit  #
+#from numba import jit  #
 from pykrige import OrdinaryKriging
-import mc3
+#import mc3
 
-%matplotlib inline
+#%matplotlib inline
 #%%
 ol40 = np.loadtxt(
     "/Users/henry/Python Files/Fe-Mg Diffusion/AZ18_WHT06_ol40_C-Prof.txt"
