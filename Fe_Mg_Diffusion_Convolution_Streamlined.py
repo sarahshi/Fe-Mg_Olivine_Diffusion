@@ -322,11 +322,11 @@ def D_Func_Ca(
 
 
 def timestepper(
-    vector_c_in, vector_Fo_in, diffusivity_function, bounds_c, timesteps, **kwargs
+    vector_c_in, vector_Fo_in, diffusivity_function, bounds_c, timesteps, dt, dx, **kwargs
 ):
     """
     Iterates multiple diffusion steps
-    Built for Fo Diffusion. Can be written for other elements by simultaneous Fo and Trace element diffusion. 
+    Built for Fo# Diffusion. Can be written for other elements by simultaneous Fo and Trace element diffusion. 
     """
     kernel_1, kernel_2, delta = diffusion_kernel(dt=dt, dx=dx)
 

@@ -10,14 +10,14 @@ from pykrige import OrdinaryKriging
 
 #%matplotlib inline
 #%%
-ol40 = np.loadtxt(
-    "/Users/henry/Python Files/Fe-Mg Diffusion/AZ18_WHT06_ol40_C-Prof.txt"
-)
-ol40_Fo = ol40[:, 1]
-ol40_x = ol40[:, 0]
+# ol40 = np.loadtxt(
+#     "/Users/henry/Python Files/Fe-Mg Diffusion/AZ18_WHT06_ol40_C-Prof.txt"
+# )
+# ol40_Fo = ol40[:, 1]
+# ol40_x = ol40[:, 0]
 
-plt.plot(ol40_x, ol40_Fo)
-plt.plot(step_x, step_c)
+# plt.plot(ol40_x, ol40_Fo)
+# plt.plot(step_x, step_c)
 # %%
 
 
@@ -605,11 +605,11 @@ plt.xlabel("Micron")
 plt.ylabel("Fo")
 # plt.ylim(0.65, 0.81)
 #%%
-ol40 = np.loadtxt(
-    "/Users/henry/Python Files/Fe-Mg Diffusion/AZ18_WHT06_ol40_C-Prof.txt"
-)
-ol40_Fo = ol40[:, 1]
-ol40_x = ol40[:, 0]
+# ol40 = np.loadtxt(
+#     "/Users/henry/Python Files/Fe-Mg Diffusion/AZ18_WHT06_ol40_C-Prof.txt"
+# )
+# ol40_Fo = ol40[:, 1]
+# ol40_x = ol40[:, 0]
 
 plt.plot(ol40_x, ol40_Fo)
 plt.plot(step_x, step_c)
