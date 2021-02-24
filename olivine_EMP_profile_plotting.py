@@ -371,7 +371,7 @@ plt.plot(step_x, Y_interp - 2 * Y_interp_std - 0.00001)
 
 
 EFo = 201000.0  # J/mol
-P = 2000000000. # Pa
+P = 200000000. # Pa
 R = 8.3145  # J/molK
 T_Celsius = 1200
 T = T_Celsius + 273.15  # 1200 + 273.15  # T in kelvin
@@ -686,4 +686,126 @@ plt.title('Xenocryst S_Ol_6 Overgrowth Profile 2')
 
 plt.annotate(f'Temperature: {T_Celsius} ˚C', xy = (.01, 0.95), xycoords = 'axes fraction')
 plt.annotate(f'Bestfit time: {round(time_days,1)} days', xy = (.01, 0.9), xycoords = 'axes fraction')
+# %%
+
+
+"""
+GCB Xenocryst Scoria ol43 AZ18 WHT01  
+"""
+
+x, y = get_C_prof('AZ18 WHT06 ol43 prof 1', Ol_Profiles_July)
+x = x[1:-1]
+y = y[1:-1]
+
+dx_micron = 1
+dt = 600
+step_x = np.arange(0, x.max(), dx_micron)
+
+
+
+#%%
+X_interp, Y_interp, Y_interp_std = Ol_Diff.Krige_Interpolate(
+    x,
+    y,
+    step_x,
+    variogram_parameters={"slope": 1e-4, "nugget": 2e-4},
+)
+
+plt.plot(x, y, marker="o")
+plt.plot(step_x, Y_interp)
+plt.plot(step_x, Y_interp + 2 * Y_interp_std + 0.00001)
+plt.plot(step_x, Y_interp - 2 * Y_interp_std - 0.00001)
+
+
+# %%
+
+#Convert Fo2 from log units with 10 ^(fo2) * 10^5 *1.02
+
+EFo = 201000.0  # J/mol
+P = 200000000. # Pa  100000  
+R = 8.3145  # J/molK
+T_Celsius = 1200
+T = T_Celsius + 273.15  # 1200 + 273.15  # T in kelvin
+
+alpha = 0
+beta = 90
+gamma = 90
+
+fO2 = Ol_Diff.fo2buffer(T_Celsius, P, 0.3, 'FMQ')
+
+Di = Ol_Diff.D_Fo(T, P, fO2, alpha, beta, gamma, XFo=.90, EFo=201000)
+# # Check for obeying the CFL Condition
+
+
+CFL = (dt * Di) / ((dx_micron/1e6) ** 2)
+print('Stability Condition: ' + str(CFL))
+print('Keep Below 0.5')
+
+#%%
+inflection_x = 37
+edge_x1 = 20
+edge_x2 = 120
+
+edge_c = 0.851
+center_c = 0.895
+
+
+# This indexing only works when dx is 1 µm. make more universal 
+data_interp = Y_interp[edge_x1:edge_x2]
+std_interp = Y_interp_std[edge_x1:edge_x2]
+
+Total_time = 20 * 24 * 60 * 60  # seconds
+timesteps = int(Total_time / dt)
+
+p = (T, P, fO2, inflection_x, edge_x1, edge_x2, edge_c, center_c)
+time, idx_min, sum_r2, Fo_diffusion_results = Ol_Diff.Diffusion_call(
+    p,
+    alpha,
+    beta,
+    gamma,
+    EFo,
+    timesteps,  # I should calculate the max timesteps based on the slowest diffusivity I expect.
+    data_interp,
+    std_interp,
+    dx_micron,
+    dt=dt,
+    output_full=True,
+)
+
+
+# %%
+
+Z = Ol_Diff.Best_fit_Chi2(Fo_diffusion_results, data_interp, std_interp, dt, sigma_min=1e-4)
+
+reduced_chi = Z[2] / Z[2].min()
+time_range = np.where(reduced_chi.round(2) == 2)[0]
+time_days = time/(60*60*24)
+
+time_max_days = time_range.max() * dt / (60 * 60 * 24)
+time_min_days = time_range.min() * dt / (60 * 60 * 24)
+# %%
+fig, ax = plt.subplots(figsize = (8,6))
+
+
+plt.plot(X_interp[edge_x1:edge_x2], Fo_diffusion_results[idx_min], linewidth = 6 )
+plt.plot(X_interp[edge_x1:edge_x2], Fo_diffusion_results[0], linewidth = 3 )
+#plt.plot(X_interp[edge_x1:edge_x2], Fo_diffusion_results[time_range.min()],linewidth = 3)
+#plt.plot(X_interp[edge_x1:edge_x2], Fo_diffusion_results[time_range.max()], linewidth = 3)
+#plt.plot(X_interp, Fo_diffusion_results[3842])
+
+plt.plot(x, y, marker="o", linestyle=None)
+plt.plot(step_x, Y_interp, linestyle = 'dashed')
+plt.plot(step_x, Y_interp + 2 * Y_interp_std + 0.00001, linestyle = 'dashed')
+plt.plot(step_x, Y_interp - 2 * Y_interp_std - 0.00001, linestyle = 'dashed')
+
+plt.xlabel('Distance from Rim µm')
+plt.ylabel('Fo#')
+
+plt.title('Xenocryst AZ18_WHT06 Ol_43 Overgrowth')
+
+plt.annotate(f'Temperature: {T_Celsius} ˚C', xy = (.01, 0.95), xycoords = 'axes fraction')
+plt.annotate(f'Bestfit time: {round(time_days,1)} days', xy = (.01, 0.9), xycoords = 'axes fraction')
+
+# %%
+
 # %%
