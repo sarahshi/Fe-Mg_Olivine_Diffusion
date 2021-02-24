@@ -159,6 +159,27 @@ def FO2(T, P, Buffer):
     return None
 
 
+
+def fo2buffer(T, P, delta, buff):
+    # Modified from Dan Rasmussen
+    #Reference: Frost 1991 Reviews in Mineralogy Volume 25 
+    #T is in C
+    #P in Pa
+    #delta is the delta value from NNO or QFM
+    #buff - text indicating NNO/FMQ/QFM
+    # Returns in Pa
+
+    T += 273.15 # Converts to K
+    P *= 1e-5 # Converts to Bar
+
+    if buff in ['FMQ','QFM']:
+        FO2 = 10**((-25096.3/T)+8.735+(0.110*(P-1)/T)+delta)
+    else:
+        FO2 = 10**((-24930/T)+9.36+(0.046*(P-1)/T)+delta)
+
+    
+    return FO2*1e5 
+
 def D_Fo(T, P, fO2, alpha, beta, gamma, XFo=None, EFo=201000):
     """
     Function that calculates the diffusivity for Forsterite (and Mn) in olivine.
@@ -332,6 +353,7 @@ def timestepper(
 
     # At the moment only handles Fo but should diffuse other elements too with a little modification
     results = np.zeros((timesteps, len(vector_c_in)))
+    
     for n, _ in enumerate(range(timesteps)):
         vector_c_in = diffusion_step(
             vector_c_in=vector_c_in,

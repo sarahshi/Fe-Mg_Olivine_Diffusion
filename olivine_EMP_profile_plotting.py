@@ -8,25 +8,32 @@ from pathlib import Path
 import scipy.interpolate as interp
 from matplotlib.backends.backend_pdf import PdfPages
 
-
-from pykrige import OrdinaryKriging
-
-# %%
 import Fe_Mg_Diffusion_Convolution_Streamlined as Ol_Diff
 
 #%%
 
-excel_path = "Feb 2021_EMP_GCB_version_2_16_20.xlsx"
+Feb_excel_path = "Feb 2021_EMP_GCB_version_2_16_20.xlsx"
 
-Ol_Profiles = pd.read_excel(
-    excel_path,
+Ol_Profiles_Feb = pd.read_excel(
+    Feb_excel_path,
     sheet_name="Sorted",
     #header=60,
     index_col="DataSet/Point",
     engine="openpyxl",
 )
+#%%
+July_excel_path = "July_2020_EMP_olivine_profiles.xlsx"
+
+Ol_Profiles_July = pd.read_excel(
+    July_excel_path,
+    sheet_name="EDS Profiles",
+    header=1,
+    index_col="DataSet/Point",
+    engine="openpyxl",
+)
 # %%
-Names = Ol_Profiles.Name.unique()
+Names_Feb = Ol_Profiles_Feb.Name.unique()
+Names_July = Ol_Profiles_July.Name.unique()
 # %%
 
 
@@ -66,15 +73,15 @@ def plot_prof_trace(
 
 
 # %%
-MP_Overgrowth = Ol_Profiles.loc[(Ol_Profiles.Category == "Melt Pocket Overgrowth")]
-MP_Names = MP_Overgrowth.Name.unique()
+MP_Overgrowth = Ol_Profiles_Feb.loc[(Ol_Profiles_Feb.Category == "Melt Pocket Overgrowth")]
+MP_Names_Feb = MP_Overgrowth.Name.unique()
 fig, ax = plt.subplots()
-for n in MP_Names:
+for n in MP_Names_Feb:
     # fig, ax = plt.subplots()
     # plot_prof_trace(n, Ol_Profiles, ax=ax, Element_y="NiO", Distance_Color=False)
     plot_prof_trace(
         n,
-        Ol_Profiles,
+        Ol_Profiles_Feb,
         ax=ax,
         Element_y="Fo#",
         Element_x="Distance µm",
@@ -83,21 +90,21 @@ for n in MP_Names:
 # plt.ylim(0,0.05)
 
 # %%
-Xenocrysts = Ol_Profiles.loc[(Ol_Profiles.Category == "Xenocryst")]
-Xenocryst_Names = Xenocrysts.Name.unique()
+Xenocrysts = Ol_Profiles_Feb.loc[(Ol_Profiles_Feb.Category == "Xenocryst")]
+Xenocryst_Names_Feb = Xenocrysts.Name.unique()
 fig, ax = plt.subplots()
-for n in Xenocryst_Names:
+for n in Xenocryst_Names_Feb:
     # fig, ax = plt.subplots()
     # plot_prof_trace(n, Ol_Profiles, ax=ax, Element_y="NiO", Distance_Color=False)
     plot_prof_trace(
         n,
-        Ol_Profiles,
+        Ol_Profiles_Feb,
         ax=ax,
         Element_y="NiO",
         Element_x="Distance µm",
         Distance_Color=False,
     )
-# plt.ylim(0,0.05)
+
 
 # %%
 
@@ -124,9 +131,9 @@ def plot_2_elements(Ol_Profiles, Sample_name, element_1="Fo#", element_2="CaO", 
     ax2.plot(x_2, y_2, color=color, marker="s", linestyle="dashed")
     ax2.tick_params(axis="y", labelcolor=color)
 
-    fig.tight_layout()  # otherwise the right y-label is slightly clipped
+    #fig.tight_layout()  # otherwise the right y-label is slightly clipped
 
-    return fig, ax1, ax2
+    #return fig, ax1, ax2
 
 
 # %%
@@ -167,13 +174,13 @@ def profile_pdf_plot(Ol_Profiles, Names):
                     #ax=ax_c
                 )
 
-                #ax_d = fig.add_subplot(4,1,4, sharex = ax_a)
-                fig.add_subplot(4,1,4)
-                plot_2_elements(
-                    Ol_Profiles,
-                    Sample_name=n, element_1="TiO2", element_2="Cr2O3",
-                    # ax=ax_d
-                )
+                # #ax_d = fig.add_subplot(4,1,4, sharex = ax_a)
+                # fig.add_subplot(4,1,4)
+                # plot_2_elements(
+                #     Ol_Profiles,
+                #     Sample_name=n, element_1="TiO2", element_2="Cr2O3",
+                #     # ax=ax_d
+                #)
                 fig.subplots_adjust(hspace=0.05)
                 #ax_a.get_shared_x_axes().join(ax_a, ax_b, ax_c, ax_d)
                 
@@ -183,8 +190,12 @@ def profile_pdf_plot(Ol_Profiles, Names):
         
 
 # %%
-profile_pdf_plot(Ol_Profiles,
-    Names
+profile_pdf_plot(Ol_Profiles_Feb,
+    Names_Feb
+)
+# %%
+profile_pdf_plot(Ol_Profiles_July,
+    Names_July
 )
 
 # %%
@@ -194,11 +205,11 @@ Fo# Diffusion Modeling
 # %%
 
 
-x, y = get_C_prof('AZ18 WHT01_bigol1_overgrowth_prof_1', Ol_Profiles)
+x, y = get_C_prof('AZ18 WHT01_bigol1_overgrowth_prof_1', Ol_Profiles_Feb)
 
 
 dx_micron = 1
-dt = 4000
+dt = 600
 step_x = np.arange(0, x.max(), dx_micron)
 
 
@@ -219,19 +230,29 @@ plt.plot(step_x, Y_interp - 2 * Y_interp_std - 0.00001)
 
 # %%
 
+#Convert Fo2 from log units with 10 ^(fo2) * 10^5 *1.02
 
-# Di = D_FO_Func(0.8)
-# # Check for obeying the CFL Condition
-# CFL = (dt * Di) / (dx ** 2)
-# print(CFL)
-
-fO2 = 1e-7  # 2.006191e-05 # Pa
 EFo = 201000.0  # J/mol
-P = 100000  # 200000000. # Pa
+P = 200000000. # Pa  100000  
 R = 8.3145  # J/molK
-T_Celsius = 1230
+T_Celsius = 1200
 T = T_Celsius + 273.15  # 1200 + 273.15  # T in kelvin
 
+alpha = 90
+beta = 90
+gamma = 0
+
+fO2 = Ol_Diff.fo2buffer(T_Celsius, P, 0.3, 'FMQ')
+
+Di = Ol_Diff.D_Fo(T, P, fO2, alpha, beta, gamma, XFo=.90, EFo=201000)
+# # Check for obeying the CFL Condition
+
+
+CFL = (dt * Di) / ((dx_micron/1e6) ** 2)
+print('Stability Condition: ' + str(CFL))
+print('Keep Below 0.5')
+
+#%%
 inflection_x = 35
 edge_x1 = 20
 edge_x2 = 80
@@ -239,15 +260,12 @@ edge_x2 = 80
 edge_c = 0.9215
 center_c = 0.8965
 
-alpha = 90
-beta = 90
-gamma = 0
 
 # This indexing only works when dx is 1 µm. make more universal 
 data_interp = Y_interp[edge_x1:edge_x2]
 std_interp = Y_interp_std[edge_x1:edge_x2]
 
-Total_time = 100 * 24 * 60 * 60  # seconds
+Total_time = 20 * 24 * 60 * 60  # seconds
 timesteps = int(Total_time / dt)
 
 p = (T, P, fO2, inflection_x, edge_x1, edge_x2, edge_c, center_c)
@@ -271,7 +289,7 @@ time, idx_min, sum_r2, Fo_diffusion_results = Ol_Diff.Diffusion_call(
 Z = Ol_Diff.Best_fit_Chi2(Fo_diffusion_results, data_interp, std_interp, dt, sigma_min=1e-4)
 
 reduced_chi = Z[2] / Z[2].min()
-time_range = np.where(reduced_chi.round(1) == 2)[0]
+time_range = np.where(reduced_chi.round(2) == 2)[0]
 time_days = time/(60*60*24)
 
 time_max_days = time_range.max() * dt / (60 * 60 * 24)
@@ -303,6 +321,7 @@ plt.annotate(f'Bestfit time: {round(time_days,1)} days', xy = (.74, 0.9), xycoor
 
 
 # %%
+# %%
 
 
 
@@ -319,11 +338,11 @@ New Model!
 """
 
 
-x, y = get_C_prof('AZ18 WHT01_bigol2_overgrowth_prof_1', Ol_Profiles)
+x, y = get_C_prof('AZ18 WHT01_bigol2_overgrowth_prof_1', Ol_Profiles_Feb)
 
 
 dx_micron = 1
-dt = 4000
+dt = 400
 step_x = np.arange(0, x.max(), dx_micron)
 
 
@@ -350,12 +369,13 @@ plt.plot(step_x, Y_interp - 2 * Y_interp_std - 0.00001)
 # CFL = (dt * Di) / (dx ** 2)
 # print(CFL)
 
-fO2 = 1e-7  # 2.006191e-05 # Pa
+
 EFo = 201000.0  # J/mol
-P = 100000  # 200000000. # Pa
+P = 2000000000. # Pa
 R = 8.3145  # J/molK
-T_Celsius = 1230
+T_Celsius = 1200
 T = T_Celsius + 273.15  # 1200 + 273.15  # T in kelvin
+fO2 = Ol_Diff.fo2buffer(T_Celsius, P, 0.3, 'FMQ')
 
 inflection_x = 15
 edge_x1 = 0
@@ -425,4 +445,245 @@ plt.annotate(f'Temperature: {T_Celsius} ˚C', xy = (.74, 0.95), xycoords = 'axes
 plt.annotate(f'Bestfit time: {round(time_days,1)} days', xy = (.74, 0.9), xycoords = 'axes fraction')
 
 
+# %%
+
+
+# %%
+"""
+Melt Pocket Adjacent Olivine Overgrowth WHT06. 
+"""
+
+x, y = get_C_prof('AZ18 WHT06 ol_overgrowth1 prof 1', Ol_Profiles_July)
+
+
+dx_micron = 1
+dt = 600
+step_x = np.arange(0, x.max(), dx_micron)
+
+
+
+
+X_interp, Y_interp, Y_interp_std = Ol_Diff.Krige_Interpolate(
+    x,
+    y,
+    step_x,
+    variogram_parameters={"slope": 1e-4, "nugget": 2e-4},
+)
+
+plt.plot(x, y, marker="o")
+plt.plot(step_x, Y_interp)
+plt.plot(step_x, Y_interp + 2 * Y_interp_std + 0.00001)
+plt.plot(step_x, Y_interp - 2 * Y_interp_std - 0.00001)
+
+
+# %%
+
+#Convert Fo2 from log units with 10 ^(fo2) * 10^5 *1.02
+
+EFo = 201000.0  # J/mol
+P = 2000000000. # Pa  100000  
+R = 8.3145  # J/molK
+T_Celsius = 1200
+T = T_Celsius + 273.15  # 1200 + 273.15  # T in kelvin
+
+alpha = 0
+beta = 90
+gamma = 90
+
+fO2 = Ol_Diff.fo2buffer(T_Celsius, P, 0.3, 'FMQ')
+
+Di = Ol_Diff.D_Fo(T, P, fO2, alpha, beta, gamma, XFo=.90, EFo=201000)
+# # Check for obeying the CFL Condition
+
+
+CFL = (dt * Di) / ((dx_micron/1e6) ** 2)
+print('Stability Condition: ' + str(CFL))
+print('Keep Below 0.5')
+
+#%%
+inflection_x = 18
+edge_x1 = 0
+edge_x2 = 35
+
+edge_c = 0.9325
+center_c = 0.907
+
+
+# This indexing only works when dx is 1 µm. make more universal 
+data_interp = Y_interp[edge_x1:edge_x2]
+std_interp = Y_interp_std[edge_x1:edge_x2]
+
+Total_time = 20 * 24 * 60 * 60  # seconds
+timesteps = int(Total_time / dt)
+
+p = (T, P, fO2, inflection_x, edge_x1, edge_x2, edge_c, center_c)
+time, idx_min, sum_r2, Fo_diffusion_results = Ol_Diff.Diffusion_call(
+    p,
+    alpha,
+    beta,
+    gamma,
+    EFo,
+    timesteps,  # I should calculate the max timesteps based on the slowest diffusivity I expect.
+    data_interp,
+    std_interp,
+    dx_micron,
+    dt=dt,
+    output_full=True,
+)
+
+
+# %%
+
+Z = Ol_Diff.Best_fit_Chi2(Fo_diffusion_results, data_interp, std_interp, dt, sigma_min=1e-4)
+
+reduced_chi = Z[2] / Z[2].min()
+time_range = np.where(reduced_chi.round(2) == 2)[0]
+time_days = time/(60*60*24)
+
+time_max_days = time_range.max() * dt / (60 * 60 * 24)
+time_min_days = time_range.min() * dt / (60 * 60 * 24)
+# %%
+fig, ax = plt.subplots(figsize = (8,6))
+
+
+plt.plot(X_interp[edge_x1:edge_x2], Fo_diffusion_results[idx_min], linewidth = 6 )
+plt.plot(X_interp[edge_x1:edge_x2], Fo_diffusion_results[0], linewidth = 3 )
+#plt.plot(X_interp[edge_x1:edge_x2], Fo_diffusion_results[time_range.min()],linewidth = 3)
+#plt.plot(X_interp[edge_x1:edge_x2], Fo_diffusion_results[time_range.max()], linewidth = 3)
+#plt.plot(X_interp, Fo_diffusion_results[3842])
+
+plt.plot(x, y, marker="o", linestyle=None)
+plt.plot(step_x, Y_interp, linestyle = 'dashed')
+plt.plot(step_x, Y_interp + 2 * Y_interp_std + 0.00001, linestyle = 'dashed')
+plt.plot(step_x, Y_interp - 2 * Y_interp_std - 0.00001, linestyle = 'dashed')
+
+plt.xlabel('Distance from Rim µm')
+plt.ylabel('Fo#')
+
+plt.title('AZ18 WHT06 MP Adjacent Ol overgrowth')
+
+plt.annotate(f'Temperature: {T_Celsius} ˚C', xy = (.74, 0.95), xycoords = 'axes fraction')
+plt.annotate(f'Bestfit time: {round(time_days,1)} days', xy = (.74, 0.9), xycoords = 'axes fraction')
+# %%
+
+
+
+# %%
+
+
+"""
+GCB Xenocryst Scoria Ol_6 Overgrowth  
+"""
+
+x, y = get_C_prof('Xenocryst_ol6_prof_2', Ol_Profiles_Feb)
+
+
+dx_micron = 1
+dt = 600
+step_x = np.arange(0, x.max(), dx_micron)
+
+
+
+
+X_interp, Y_interp, Y_interp_std = Ol_Diff.Krige_Interpolate(
+    x,
+    y,
+    step_x,
+    variogram_parameters={"slope": 1e-4, "nugget": 2e-4},
+)
+
+plt.plot(x, y, marker="o")
+plt.plot(step_x, Y_interp)
+plt.plot(step_x, Y_interp + 2 * Y_interp_std + 0.00001)
+plt.plot(step_x, Y_interp - 2 * Y_interp_std - 0.00001)
+
+
+# %%
+
+#Convert Fo2 from log units with 10 ^(fo2) * 10^5 *1.02
+
+EFo = 201000.0  # J/mol
+P = 200000000. # Pa  100000  
+R = 8.3145  # J/molK
+T_Celsius = 1200
+T = T_Celsius + 273.15  # 1200 + 273.15  # T in kelvin
+
+alpha = 90
+beta = 90
+gamma = 0
+
+fO2 = Ol_Diff.fo2buffer(T_Celsius, P, 0.3, 'FMQ')
+
+Di = Ol_Diff.D_Fo(T, P, fO2, alpha, beta, gamma, XFo=.90, EFo=201000)
+# # Check for obeying the CFL Condition
+
+
+CFL = (dt * Di) / ((dx_micron/1e6) ** 2)
+print('Stability Condition: ' + str(CFL))
+print('Keep Below 0.5')
+
+#%%
+inflection_x = 25
+edge_x1 = 12
+edge_x2 = 54
+
+edge_c = 0.836
+center_c = 0.905
+
+
+# This indexing only works when dx is 1 µm. make more universal 
+data_interp = Y_interp[edge_x1:edge_x2]
+std_interp = Y_interp_std[edge_x1:edge_x2]
+
+Total_time = 20 * 24 * 60 * 60  # seconds
+timesteps = int(Total_time / dt)
+
+p = (T, P, fO2, inflection_x, edge_x1, edge_x2, edge_c, center_c)
+time, idx_min, sum_r2, Fo_diffusion_results = Ol_Diff.Diffusion_call(
+    p,
+    alpha,
+    beta,
+    gamma,
+    EFo,
+    timesteps,  # I should calculate the max timesteps based on the slowest diffusivity I expect.
+    data_interp,
+    std_interp,
+    dx_micron,
+    dt=dt,
+    output_full=True,
+)
+
+
+# %%
+
+Z = Ol_Diff.Best_fit_Chi2(Fo_diffusion_results, data_interp, std_interp, dt, sigma_min=1e-4)
+
+reduced_chi = Z[2] / Z[2].min()
+time_range = np.where(reduced_chi.round(2) == 2)[0]
+time_days = time/(60*60*24)
+
+time_max_days = time_range.max() * dt / (60 * 60 * 24)
+time_min_days = time_range.min() * dt / (60 * 60 * 24)
+# %%
+fig, ax = plt.subplots(figsize = (8,6))
+
+
+plt.plot(X_interp[edge_x1:edge_x2], Fo_diffusion_results[idx_min], linewidth = 6 )
+plt.plot(X_interp[edge_x1:edge_x2], Fo_diffusion_results[0], linewidth = 3 )
+#plt.plot(X_interp[edge_x1:edge_x2], Fo_diffusion_results[time_range.min()],linewidth = 3)
+#plt.plot(X_interp[edge_x1:edge_x2], Fo_diffusion_results[time_range.max()], linewidth = 3)
+#plt.plot(X_interp, Fo_diffusion_results[3842])
+
+plt.plot(x, y, marker="o", linestyle=None)
+plt.plot(step_x, Y_interp, linestyle = 'dashed')
+plt.plot(step_x, Y_interp + 2 * Y_interp_std + 0.00001, linestyle = 'dashed')
+plt.plot(step_x, Y_interp - 2 * Y_interp_std - 0.00001, linestyle = 'dashed')
+
+plt.xlabel('Distance from Rim µm')
+plt.ylabel('Fo#')
+
+plt.title('Xenocryst S_Ol_6 Overgrowth Profile 2')
+
+plt.annotate(f'Temperature: {T_Celsius} ˚C', xy = (.01, 0.95), xycoords = 'axes fraction')
+plt.annotate(f'Bestfit time: {round(time_days,1)} days', xy = (.01, 0.9), xycoords = 'axes fraction')
 # %%
