@@ -174,13 +174,13 @@ def profile_pdf_plot(Ol_Profiles, Names):
                     #ax=ax_c
                 )
 
-                # #ax_d = fig.add_subplot(4,1,4, sharex = ax_a)
-                # fig.add_subplot(4,1,4)
-                # plot_2_elements(
-                #     Ol_Profiles,
-                #     Sample_name=n, element_1="TiO2", element_2="Cr2O3",
-                #     # ax=ax_d
-                #)
+                #ax_d = fig.add_subplot(4,1,4, sharex = ax_a)
+                fig.add_subplot(4,1,4)
+                plot_2_elements(
+                    Ol_Profiles,
+                    Sample_name=n, element_1="TiO2", element_2="Cr2O3",
+                    # ax=ax_d
+                )
                 fig.subplots_adjust(hspace=0.05)
                 #ax_a.get_shared_x_axes().join(ax_a, ax_b, ax_c, ax_d)
                 
@@ -190,13 +190,13 @@ def profile_pdf_plot(Ol_Profiles, Names):
         
 
 # %%
-profile_pdf_plot(Ol_Profiles_Feb,
-    Names_Feb
-)
-# %%
-profile_pdf_plot(Ol_Profiles_July,
-    Names_July
-)
+# profile_pdf_plot(Ol_Profiles_Feb,
+#     Names_Feb
+# )
+# # %%
+# profile_pdf_plot(Ol_Profiles_July,
+#     Names_July
+# )
 
 # %%
 """
