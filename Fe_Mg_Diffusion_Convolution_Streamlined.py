@@ -132,12 +132,6 @@ def diffusion_step(
     return vector_out
     
 
-def interp_data():
-    # Interpolate Data to fit dx
-
-    return None
-
-
 """
 3 Vectors
 1) Diffusing Concentration 
@@ -152,12 +146,6 @@ One Idea is to do a refining grid search. Do a really sparse dt model with tight
 """
 # %%
 # Elemental Diffusivities
-
-
-def FO2(T, P, Buffer):
-    " this function shold be able to calculate FO2"
-    return None
-
 
 
 def fo2buffer(T, P, delta, buff):
@@ -340,7 +328,10 @@ def D_Func_Ca(
 
 
 # %%
+"""
+One idea is to write this function so that if vector_Fo_in is an array it iterates through that for the Fo Vector 
 
+"""
 
 def timestepper(
     vector_c_in, vector_Fo_in, diffusivity_function, bounds_c, timesteps, dt, dx, **kwargs
@@ -352,8 +343,8 @@ def timestepper(
     kernel_1, kernel_2, delta = diffusion_kernel(dt=dt, dx=dx)
 
     # At the moment only handles Fo but should diffuse other elements too with a little modification
-    results = np.zeros((timesteps, len(vector_c_in)))
-    
+    results = np.zeros((timesteps+1, len(vector_c_in)))
+    results[0] = vector_c_in
     for n, _ in enumerate(range(timesteps)):
         vector_c_in = diffusion_step(
             vector_c_in=vector_c_in,
@@ -363,12 +354,45 @@ def timestepper(
             der_kernel_2=kernel_2,
             delta=delta,
             bounds_c=bounds_c,
-            bounds_Fo=bounds_c,
+            bounds_Fo=bounds_c,  # This needs to get updated for the Ni, Mn, or 
         )
-        vector_Fo_in = vector_c_in
-        results[n] = vector_Fo_in
+        vector_Fo_in = vector_c_in # This step needs refining to evaluate other elements. 
+        results[n+1] = vector_Fo_in
     return results
 
+def timestepper_Ni_Mn(
+    vector_c_in, vector_Fo_in, diffusivity_function, bounds_c, timesteps, dt, dx, bounds_Fo=None, Diffusing_species  **kwargs
+):
+    """
+    Iterates multiple diffusion steps
+    Built for Fo# Diffusion. Can be written for other elements by simultaneous Fo and Trace element diffusion. 
+    """
+    kernel_1, kernel_2, delta = diffusion_kernel(dt=dt, dx=dx)
+
+    # At the moment only handles Fo but should diffuse other elements too with a little modification
+    results = np.zeros((timesteps+1, len(vector_c_in)))
+    results[0] = vector_c_in
+
+    if bounds_Fo == None and : # assumes That if Bounds Fo isnt input Fo is diffusing species
+        bounds_Fo = (vector_Fo_in[0], vector_Fo_in[1])
+
+    for n, _ in enumerate(range(timesteps)):
+
+        vector_c_in = diffusion_step(
+            vector_c_in=vector_c_in,
+            vector_Fo_in=vector_Fo_in[n],
+            diffusivity_function=diffusivity_function,
+            diff_kernel_1=kernel_1,
+            der_kernel_2=kernel_2,
+            delta=delta,
+            bounds_c=bounds_c,
+            bounds_Fo=bounds_Fo,  # This needs to get updated for the Ni, Mn, or 
+        )
+        
+        results[n+1] = vector_c_in
+
+    
+    return results
 
 # %%
 
@@ -413,21 +437,14 @@ def Best_fit_Chi2(results, data_interp, sigma, dt, sigma_min=1e-4):
 def Krige_Interpolate(
     X, Y, new_X, variogram_parameters={"slope": 1e-4, "nugget": 1e-5}
 ):
-    # X, Y, new_X, variogram_parameters={"sill": 1e3, "range": 1e2, "nugget": 0.0001}
-
+   
     uk = OrdinaryKriging(
         X,
         np.zeros(X.shape),
         Y,
         pseudo_inv=True,
-        # weight=True,
-        # nlags=2,
-        # variogram_model="gaussian",
-        # exact_values = False,
         variogram_model="linear",
         variogram_parameters=variogram_parameters
-        # variogram_model="gaussian",
-        # variogram_parameters=variogram_parameters,
     )
 
     y_pred, y_std = uk.execute("grid", new_X, np.array([0.0]))
@@ -452,7 +469,7 @@ def Diffusion_call(
     beta,
     gamma,
     EFo,
-    timesteps,  # I should calcualte the max timesteps based on the slowest diffusivity I expect.
+    timesteps,  # I should calcualate the max timesteps based on the slowest diffusivity I expect.
     data_interp,
     std_interp,
     dx_micron,
@@ -494,7 +511,6 @@ def Diffusion_call(
         Fo_diffusion_results, data_interp, std_interp, dt, **kwargs
     )
 
-    # time, idx_min, sum_r2 = Best_fit_R2(Fo_diffusion_results, data_interp, dt)
     if output_full:
         return time, idx_min, sum_r2, Fo_diffusion_results
     return Fo_diffusion_results[idx_min]
@@ -516,3 +532,9 @@ Kd for Olivine that have lost central concentration
 """
 
 
+"""
+Modeling should probably include a dP/dT term but I might also want to include a pT
+
+This also requires an evolution of the diffusivity function at each timestep 
+
+"""
