@@ -100,6 +100,7 @@ def diffusion_step(
 ):
     """
     Function that takes one step forward for Forsterite dependent diffusion.
+    This is an efficient step so I have tried to move the creation of kernels and vectors outside of this single step
     Parameters:
     bounds_c = tuple of left and right boundary conditions for diffusing species (Fixed bounds at the moment)
     bounds_Fo = tuple of left and right boundary conditions for Fo
@@ -131,6 +132,36 @@ def diffusion_step(
     # out = (Diff_C * Diff_D) * delta
     return vector_out
     
+
+def diffusion_step_Ca(
+    vector_c_in,
+    diffusivity,
+    diff_kernel_1,
+    delta,
+    bounds_c,
+):
+
+    """
+    Function that takes one step forward in finite difference model of calcium diffusion in olivine.  
+    This is an efficient step so I have tried to move the creation of kernels and vectors outside of this single step
+    Parameters:
+    bounds_c = tuple of left and right boundary conditions for diffusing species (Fixed bounds at the moment)
+    bounds_Fo = tuple of left and right boundary conditions for Fo
+    Output:
+
+    """
+    pad = np.ones(3)
+    pad_c = (bounds_c[0] * pad, bounds_c[1] * pad)
+    # pad generation can probably be taken out of the loop
+
+    vector_c = np.concatenate([pad_c[0], vector_c_in, pad_c[1]])
+    
+
+    Diffusion = (np.convolve(vector_c, diff_kernel_1, mode="same") * diffusivity)[3:-3]
+
+    vector_out = vector_c_in + delta * Diffusion 
+
+    return vector_out
 
 """
 3 Vectors
@@ -361,9 +392,11 @@ def timestepper(
     return results
 
 def timestepper_Ni_Mn(
-    vector_c_in, vector_Fo_in, diffusivity_function, bounds_c, timesteps, dt, dx, bounds_Fo=None, Diffusing_species  **kwargs
+    vector_c_in, vector_Fo_in, diffusivity_function, bounds_c, timesteps, dt, dx, bounds_Fo=None, **kwargs
 ):
     """
+
+    vector_Fo_in: If running for Ni, or Mn this must be an 2D array of size(n,v) that where n is the total number of timesteps and v is the size of the Fo vector. 
     Iterates multiple diffusion steps
     Built for Fo# Diffusion. Can be written for other elements by simultaneous Fo and Trace element diffusion. 
     """
@@ -373,26 +406,40 @@ def timestepper_Ni_Mn(
     results = np.zeros((timesteps+1, len(vector_c_in)))
     results[0] = vector_c_in
 
-    if bounds_Fo == None and : # assumes That if Bounds Fo isnt input Fo is diffusing species
+    if bounds_Fo == None and len(vector_Fo_in) > 1: # assumes That if Bounds Fo isnt input Fo is diffusing species
         bounds_Fo = (vector_Fo_in[0], vector_Fo_in[1])
 
-    for n, _ in enumerate(range(timesteps)):
 
-        vector_c_in = diffusion_step(
-            vector_c_in=vector_c_in,
-            vector_Fo_in=vector_Fo_in[n],
-            diffusivity_function=diffusivity_function,
-            diff_kernel_1=kernel_1,
-            der_kernel_2=kernel_2,
-            delta=delta,
-            bounds_c=bounds_c,
-            bounds_Fo=bounds_Fo,  # This needs to get updated for the Ni, Mn, or 
-        )
-        
-        results[n+1] = vector_c_in
+        for n, _ in enumerate(range(timesteps)):
 
+            vector_c_in = diffusion_step(
+                vector_c_in=vector_c_in,
+                vector_Fo_in=vector_Fo_in[n,:],
+                diffusivity_function=diffusivity_function,
+                diff_kernel_1=kernel_1,
+                der_kernel_2=kernel_2,
+                delta=delta,
+                bounds_c=bounds_c,
+                bounds_Fo=bounds_Fo, 
+            )
+            
+            results[n+1] = vector_c_in
+        return results
+
+    else:
+                    vector_c_in = diffusion_step(
+                vector_c_in=vector_c_in,
+                vector_Fo_in=vector_Fo_in,
+                diffusivity_function=diffusivity_function,
+                diff_kernel_1=kernel_1,
+                der_kernel_2=kernel_2,
+                delta=delta,
+                bounds_c=bounds_c,
+                bounds_Fo=bounds_c, 
+            )
+        return results
     
-    return results
+
 
 # %%
 
